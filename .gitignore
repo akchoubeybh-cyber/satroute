@@ -1,3 +1,9 @@
 .venv/
 __pycache__/
 .pytest_cache/
+
+headless_out.txt
+*.pyc
+.env
+node_modules/
+dist/
