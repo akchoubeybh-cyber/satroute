@@ -132,40 +132,59 @@ class Frame(BaseModel):
 
 class Ack(BaseModel):
     """Command acknowledgment."""
+    model_config = ConfigDict(extra="allow")
+
     type: Literal["ack"] = "ack"
-    cmd: str
+    cmd: Optional[str] = None
+    id: Optional[Union[str, int]] = None
     ok: bool = True
     details: Optional[Dict[str, Any]] = None
 
 
 class ErrorMsg(BaseModel):
     """Error message."""
+    model_config = ConfigDict(extra="allow")
+
     type: Literal["error"] = "error"
-    error: str
+    error: Optional[str] = None
+    msg: Optional[str] = None
     cmd: Optional[str] = None
+    id: Optional[Union[str, int]] = None
 
 
 class OrbitPreview(BaseModel):
     """Orbit preview response."""
+    model_config = ConfigDict(extra="allow")
+
     type: Literal["orbit_preview"] = "orbit_preview"
-    points: List[Dict[str, float]]
+    id: Optional[int] = None
+    track: Optional[List[List[float]]] = None
+    points: Optional[List[Dict[str, float]]] = None
 
 
 # ---------------------------------------------------------------------------
 # Client Command Models
 # ---------------------------------------------------------------------------
 
-class PlayCmd(BaseModel):
+class BaseCmd(BaseModel):
+    """Base client command model with optional request tracking id and type tag."""
+    model_config = ConfigDict(extra="allow")
+
+    type: Optional[str] = None
+    id: Optional[Union[str, int]] = None
+
+
+class PlayCmd(BaseCmd):
     cmd: Literal["play"]
     args: Optional[Dict[str, Any]] = None
 
 
-class PauseCmd(BaseModel):
+class PauseCmd(BaseCmd):
     cmd: Literal["pause"]
     args: Optional[Dict[str, Any]] = None
 
 
-class ResetCmd(BaseModel):
+class ResetCmd(BaseCmd):
     cmd: Literal["reset"]
     args: Optional[Dict[str, Any]] = None
 
@@ -174,7 +193,7 @@ class SetScaleArgs(BaseModel):
     scale: float
 
 
-class SetScaleCmd(BaseModel):
+class SetScaleCmd(BaseCmd):
     cmd: Literal["set_scale"]
     args: SetScaleArgs
 
@@ -185,7 +204,7 @@ class SetWeightsArgs(BaseModel):
     c: float = 1.0
 
 
-class SetWeightsCmd(BaseModel):
+class SetWeightsCmd(BaseCmd):
     cmd: Literal["set_weights"]
     args: SetWeightsArgs
 
@@ -195,7 +214,7 @@ class SetParamsArgs(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
-class SetParamsCmd(BaseModel):
+class SetParamsCmd(BaseCmd):
     cmd: Literal["set_params"]
     args: SetParamsArgs
 
@@ -205,7 +224,7 @@ class FailLinkArgs(BaseModel):
     b: int
 
 
-class FailLinkCmd(BaseModel):
+class FailLinkCmd(BaseCmd):
     cmd: Literal["fail_link"]
     args: FailLinkArgs
 
@@ -215,7 +234,7 @@ class RestoreLinkArgs(BaseModel):
     b: int
 
 
-class RestoreLinkCmd(BaseModel):
+class RestoreLinkCmd(BaseCmd):
     cmd: Literal["restore_link"]
     args: RestoreLinkArgs
 
@@ -224,7 +243,7 @@ class FailSatArgs(BaseModel):
     id: int
 
 
-class FailSatCmd(BaseModel):
+class FailSatCmd(BaseCmd):
     cmd: Literal["fail_sat"]
     args: FailSatArgs
 
@@ -233,7 +252,7 @@ class RestoreSatArgs(BaseModel):
     id: int
 
 
-class RestoreSatCmd(BaseModel):
+class RestoreSatCmd(BaseCmd):
     cmd: Literal["restore_sat"]
     args: RestoreSatArgs
 
@@ -244,7 +263,7 @@ class MoveSatArgs(BaseModel):
     lon: float
 
 
-class MoveSatCmd(BaseModel):
+class MoveSatCmd(BaseCmd):
     cmd: Literal["move_sat"]
     args: MoveSatArgs
 
@@ -255,13 +274,17 @@ class MoveGsArgs(BaseModel):
     lon: float
 
 
-class MoveGsCmd(BaseModel):
+class MoveGsCmd(BaseCmd):
     cmd: Literal["move_gs"]
     args: MoveGsArgs
 
 
 class PreviewOrbitArgs(BaseModel):
     model_config = ConfigDict(extra="allow")
+
+    id: Optional[int] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
     num_sats: Optional[int] = None
     num_planes: Optional[int] = None
     f: Optional[int] = None
@@ -269,7 +292,7 @@ class PreviewOrbitArgs(BaseModel):
     altitude_km: Optional[float] = None
 
 
-class PreviewOrbitCmd(BaseModel):
+class PreviewOrbitCmd(BaseCmd):
     cmd: Literal["preview_orbit"]
     args: Optional[PreviewOrbitArgs] = None
 
@@ -278,7 +301,7 @@ class SetFlowScaleArgs(BaseModel):
     factor: float
 
 
-class SetFlowScaleCmd(BaseModel):
+class SetFlowScaleCmd(BaseCmd):
     cmd: Literal["set_flow_scale"]
     args: SetFlowScaleArgs
 
@@ -290,7 +313,7 @@ class AddFlowArgs(BaseModel):
     id: Optional[str] = None
 
 
-class AddFlowCmd(BaseModel):
+class AddFlowCmd(BaseCmd):
     cmd: Literal["add_flow"]
     args: AddFlowArgs
 
@@ -299,7 +322,7 @@ class RemoveFlowArgs(BaseModel):
     id: str
 
 
-class RemoveFlowCmd(BaseModel):
+class RemoveFlowCmd(BaseCmd):
     cmd: Literal["remove_flow"]
     args: RemoveFlowArgs
 
