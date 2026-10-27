@@ -308,6 +308,104 @@ def build_isl(
     return isl_links
 
 
+def build_gsl(
+    sat_pos: np.ndarray,
+    ground: List[GroundStation],
+    prev_gsl: Optional[List[Tuple[int, int]]] = None,
+    params: Optional[TopoParams] = None,
+) -> List[Tuple[int, int]]:
+    """Build ground-satellite links (GSLs) using local elevation and hysteresis.
+
+    Args:
+        sat_pos: (N, 3) array of satellite ECEF coordinates in km.
+        ground: List of GroundStation objects.
+        prev_gsl: Previous topology GSL list of (sat_id, station_id) pairs, or None.
+        params: TopoParams instance (defaults to standard parameters if None).
+
+    Returns:
+        List of (sat_id, station_id) tuples.
+    """
+    if params is None:
+        params = TopoParams()
+
+    if not ground or len(sat_pos) == 0:
+        return []
+
+    n_sats = len(sat_pos)
+    ground_pos = np.stack([gs.ecef for gs in ground], axis=0)  # (G, 3)
+
+    # Vectorised elevation calculation for all ground stations to all satellites
+    # ground_pos[:, None, :] is (G, 1, 3); sat_pos[None, :, :] is (1, N, 3)
+    # Result is (G, N) array of elevations in degrees
+    el_matrix = elevation_deg(
+        ground_pos[:, np.newaxis, :],
+        sat_pos[np.newaxis, :, :],
+    )
+
+    drop_threshold = params.el_min_deg - params.gsl_drop_margin_deg
+    build_threshold = params.el_min_deg
+    max_per_station = params.gsl_max_per_station
+
+    # Index previous links by station_id
+    prev_by_station: Dict[int, List[int]] = {}
+    if prev_gsl:
+        for sat_id, st_id in prev_gsl:
+            if 0 <= sat_id < n_sats:
+                prev_by_station.setdefault(st_id, []).append(sat_id)
+
+    gsl_links: List[Tuple[int, int]] = []
+
+    for g_idx, st in enumerate(ground):
+        elevations = el_matrix[g_idx]
+        station_sats: List[int] = []
+        assigned_sats: set[int] = set()
+
+        # STEP A (hysteresis):
+        # Keep previous links of this station whose elevation is still >= el_min_deg - gsl_drop_margin_deg
+        # (keep the best ones first, up to gsl_max_per_station).
+        prev_sats = prev_by_station.get(st.id, [])
+        if prev_sats:
+            prev_candidates = []
+            seen_prev_sat = set()
+            for s_id in prev_sats:
+                if s_id not in seen_prev_sat:
+                    seen_prev_sat.add(s_id)
+                    el = elevations[s_id]
+                    if el >= drop_threshold:
+                        prev_candidates.append((el, s_id))
+
+            # Sort descending by elevation
+            prev_candidates.sort(key=lambda x: x[0], reverse=True)
+
+            for _, s_id in prev_candidates[:max_per_station]:
+                station_sats.append(s_id)
+                assigned_sats.add(s_id)
+
+        # STEP B:
+        # If the station has fewer than gsl_max_per_station links,
+        # add the satellites with the highest elevation that have elevation >= el_min_deg,
+        # until the limit is reached.
+        needed = max_per_station - len(station_sats)
+        if needed > 0:
+            valid_new_mask = elevations >= build_threshold
+            cand_sats = np.where(valid_new_mask)[0]
+
+            if len(cand_sats) > 0:
+                filtered_cands = [s for s in cand_sats if s not in assigned_sats]
+                if filtered_cands:
+                    cand_elevations = elevations[filtered_cands]
+                    sort_order = np.argsort(cand_elevations)[::-1]  # Descending
+                    for idx in sort_order[:needed]:
+                        s_id = int(filtered_cands[idx])
+                        station_sats.append(s_id)
+                        assigned_sats.add(s_id)
+
+        for s_id in station_sats:
+            gsl_links.append((s_id, st.id))
+
+    return gsl_links
+
+
 def build_topology(
     sat_pos: np.ndarray,
     ground: List[GroundStation],
@@ -316,9 +414,9 @@ def build_topology(
 ) -> Topology:
     """Build constellation network topology at a single time step.
 
-    Calls build_isl with prev.isl (or [] if prev is None), fills pos,
-    ground_pos from the ground station list, dist for every ISL in km,
-    and initializes gsl = [].
+    Calls build_isl with prev.isl (or [] if prev is None), calls build_gsl
+    with prev.gsl (or [] if prev is None), fills pos, ground_pos from the
+    ground station list, and computes dist for every ISL and GSL in km.
 
     Args:
         sat_pos: (N, 3) array of satellite ECEF coordinates in km.
@@ -333,12 +431,17 @@ def build_topology(
         params = TopoParams()
 
     prev_isl = prev.isl if prev is not None and prev.isl is not None else []
+    prev_gsl = prev.gsl if prev is not None and prev.gsl is not None else []
+
     isl = build_isl(sat_pos, prev_isl=prev_isl, params=params)
+    gsl = build_gsl(sat_pos, ground=ground, prev_gsl=prev_gsl, params=params)
 
     if ground:
         ground_pos = np.stack([gs.ecef for gs in ground], axis=0)
+        station_map = {gs.id: gs.ecef for gs in ground}
     else:
         ground_pos = np.empty((0, 3), dtype=np.float64)
+        station_map = {}
 
     # Compute Euclidean distance for every ISL link
     dist: Dict[Tuple[int, int], float] = {}
@@ -346,9 +449,16 @@ def build_topology(
         d = float(np.linalg.norm(sat_pos[i] - sat_pos[j]))
         dist[(i, j)] = d
 
+    # Add each GSL's slant range (km) using its normalised key
+    for sat_id, st_id in gsl:
+        st_ecef = station_map[st_id]
+        d = float(np.linalg.norm(sat_pos[sat_id] - st_ecef))
+        key = (sat_id, st_id) if sat_id < st_id else (st_id, sat_id)
+        dist[key] = d
+
     return Topology(
         isl=isl,
-        gsl=[],
+        gsl=gsl,
         pos=sat_pos,
         ground_pos=ground_pos,
         dist=dist,
