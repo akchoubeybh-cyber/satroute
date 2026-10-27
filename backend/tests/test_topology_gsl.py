@@ -16,7 +16,7 @@ from app.sim.topology import (
 
 
 def test_1_gsl_elevation_constraint():
-    """1. Every GSL has elevation >= 23 deg (25 minus the margin)."""
+    """1. Every GSL has elevation >= params.el_min_deg - params.gsl_drop_margin_deg."""
     constellation = walker_delta(120, 12, 1, 53, 550)
     ground = default_ground_stations(120)
     pos = positions_ecef(constellation, 0.0)
@@ -27,7 +27,7 @@ def test_1_gsl_elevation_constraint():
     assert len(topo.gsl) > 0, "GSL links should not be empty"
 
     station_map = {gs.id: gs.ecef for gs in ground}
-    min_allowed_el = params.el_min_deg - params.gsl_drop_margin_deg  # 23.0 deg
+    min_allowed_el = params.el_min_deg - params.gsl_drop_margin_deg
 
     for sat_id, st_id in topo.gsl:
         st_ecef = station_map[st_id]

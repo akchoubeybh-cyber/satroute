@@ -9,6 +9,6 @@ ATMOS_KM: float = 80.0  # km, Earth atmospheric occlusion height for line-of-sig
 ISL_MAX_RANGE_KM: float = 5000.0  # km, maximum inter-satellite link range
 ISL_MAX_DEGREE: int = 4  # maximum ISL transceivers per satellite
 ISL_BUILD_FRAC: float = 0.9  # fraction of max range at which ISL links are built
-GSL_EL_MIN_DEG: float = 25.0  # degrees, minimum elevation angle for ground-satellite link
+GSL_EL_MIN_DEG: float = 10.0  # degrees, minimum elevation angle for ground-satellite link
 GSL_DROP_MARGIN_DEG: float = 2.0  # degrees, margin below el_min before dropping link
 GSL_MAX_PER_STATION: int = 3  # maximum simultaneous GSL connections per ground station
